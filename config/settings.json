@@ -1,0 +1,7 @@
+{
+  "proxy": "ENV:my_proxy",
+  "private_key": "ENV:my_wallet_key",
+  "network": "Ethereum",
+  "token1": "ETH",
+  "token2": "USDC"
+}
