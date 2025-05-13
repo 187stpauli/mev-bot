@@ -1,4 +1,4 @@
-WSS_URL = "wss://eth-mainnet.blastapi.io/97cc6b24-24f8-41e6-8fbc-61a47f248f55"
+WSS_URL = ""
 
 POOLS = {
     "USDT": {
@@ -15,3 +15,11 @@ POOLS = {
 
 # keccak256("Swap(address,uint256,uint256,uint256,uint256,address)")
 SWAP_TOPIC = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67"
+
+TOKEN_DECIMALS = {
+    "USDT": 6,
+    "DAI": 18,
+    "WETH": 18
+}
+
+THRESHOLD = 0.05

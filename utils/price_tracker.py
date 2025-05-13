@@ -1,6 +1,6 @@
 
 class PriceTracker:
-    def __init__(self, threshold=0.02):
+    def __init__(self, threshold):
         self.prices = {}
         self.threshold = threshold
 

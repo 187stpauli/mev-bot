@@ -1,2 +1,2 @@
-Получение SWAP в пуле ETH/USDC в сети Ethereum.
-В файле networks_data в поле rpc_url в кавычки вставьте свой rpc_url ws.
+В файле config в поле threshold установите порог срабатывания на спред по умолчанию 0.05 (5%), в поле wss_url
+в кавычки вставьте свой rpc_url ws

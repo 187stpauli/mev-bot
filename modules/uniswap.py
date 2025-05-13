@@ -4,7 +4,7 @@ from _pydecimal import getcontext, Decimal
 import aiohttp
 from eth_abi import decode_abi
 from eth_utils import decode_hex
-from config.config import WSS_URL, POOLS, SWAP_TOPIC
+from config.config import WSS_URL, POOLS, SWAP_TOPIC, TOKEN_DECIMALS
 
 getcontext().prec = 36  # повышаем точность Decimal
 
@@ -75,13 +75,9 @@ async def subscribe_to_pool(pool_name, price_tracker):
 
 
 def decode_swap_event(log: dict, pool: dict, base_token: str) -> Decimal:
-    """
-    Декодирует событие Swap и возвращает цену base_token в ETH.
-    """
 
     data = decode_hex(log["data"])
-
-    amount0, amount1, sqrtPriceX96, liquidity, tick_bytes = decode_abi(
+    _, _, sqrtPriceX96, _, _ = decode_abi(
         ["int256", "int256", "uint160", "uint128", "bytes32"], data
     )
 
@@ -91,10 +87,17 @@ def decode_swap_event(log: dict, pool: dict, base_token: str) -> Decimal:
     token0 = pool["token0"]
     token1 = pool["token1"]
 
-    if token0 == base_token:
-        price = raw_price  # baseToken / ETH
-    else:
-        price = Decimal(1) / raw_price  # ETH / baseToken
+    dec0 = TOKEN_DECIMALS[token0]
+    dec1 = TOKEN_DECIMALS[token1]
 
-    print(f"📊 Обновление цены в пуле {base_token}/ETH: {price}")
-    return price
+    # поправка на decimals
+    scale = Decimal(10) ** (dec0 - dec1)
+    adjusted_price = raw_price * scale
+
+    if base_token == token0:
+        final_price = Decimal(1) / adjusted_price
+    else:
+        final_price = adjusted_price
+
+    print(f"📊 1 ETH ≈ {final_price:.6f} {base_token}")
+    return final_price
