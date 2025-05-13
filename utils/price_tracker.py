@@ -1,3 +1,5 @@
+from utils.logger import logger
+
 
 class PriceTracker:
     def __init__(self, threshold):
@@ -13,5 +15,11 @@ class PriceTracker:
         usdt_price = self.prices["USDT"]
         dai_price = self.prices["DAI"]
         spread = abs(usdt_price - dai_price) / ((usdt_price + dai_price) / 2)
-        if spread >= self.threshold:
-            print(f"Arbitrage opportunity detected! Spread: {spread*100:.2f}%")
+        if usdt_price > dai_price:
+            direction = "USDT/ETH выше, чем DAI/ETH"
+        elif dai_price > usdt_price:
+            direction = "DAI/ETH выше, чем USDT/ETH"
+        else:
+            direction = "цены равны"
+
+        logger.info(f"💰 Найден арбитраж: {direction}, разница составляет {spread * 100:.2f}%\n")

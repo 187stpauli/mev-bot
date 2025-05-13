@@ -4,17 +4,18 @@ from _pydecimal import getcontext, Decimal
 import aiohttp
 from eth_abi import decode_abi
 from eth_utils import decode_hex
-from config.config import WSS_URL, POOLS, SWAP_TOPIC, TOKEN_DECIMALS
+from config.config import POOLS, SWAP_TOPIC, TOKEN_DECIMALS
+from utils.logger import logger
 
-getcontext().prec = 36  # повышаем точность Decimal
+getcontext().prec = 36
 
 
-async def subscribe_to_pool(pool_name, price_tracker):
+async def subscribe_to_pool(pool_name, price_tracker, wss_url):
     pool = POOLS[pool_name]
     base_token = pool["token0"] if pool["token0"] in ["USDT", "DAI"] else pool["token1"]
 
     async with aiohttp.ClientSession() as session:
-        async with session.ws_connect(WSS_URL) as ws:
+        async with session.ws_connect(wss_url) as ws:
             subscribe_params = {
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -31,7 +32,7 @@ async def subscribe_to_pool(pool_name, price_tracker):
             await ws.send_str(json.dumps(subscribe_params))
             subscription_response = await ws.receive()
             subscription_id = json.loads(subscription_response.data).get("result")
-            print(f"✅ Подписка на пул {pool_name} оформлена, ID: {subscription_id}")
+            logger.info(f"✅ Подписка на пул {pool_name} оформлена, ID: {subscription_id}\n")
 
             try:
                 async for msg in ws:
@@ -43,13 +44,13 @@ async def subscribe_to_pool(pool_name, price_tracker):
                             price_tracker.update_price(pool_name, price)
 
                     elif msg.type == aiohttp.WSMsgType.ERROR:
-                        print(f"❌ Ошибка WebSocket в пуле {pool_name}: {msg.data}")
+                        logger.error(f"❌ Ошибка WebSocket в пуле {pool_name}: {msg.data}")
                         break
 
             except asyncio.CancelledError:
-                print(f"🛑 Подписка на пул {pool_name} остановлена вручную.")
+                logger.error(f"🛑 Подписка на пул {pool_name} остановлена вручную.\n")
             except Exception as e:
-                print(f"⚠️ Неожиданная ошибка в {pool_name}: {type(e).__name__} — {e}")
+                logger.warning(f"⚠️ Неожиданная ошибка в {pool_name}: {type(e).__name__} — {e}")
             finally:
                 try:
                     if not ws.closed:
@@ -65,13 +66,13 @@ async def subscribe_to_pool(pool_name, price_tracker):
                         if response and response.type == aiohttp.WSMsgType.TEXT:
                             result = json.loads(response.data).get("result")
                             if result:
-                                print(f"📭 Отписка от пула {pool_name} успешна.")
+                                logger.info(f"📭 Отписка от пула {pool_name} успешна.\n")
                             else:
-                                print(f"⚠️ Отписка от пула {pool_name} не удалась.")
+                                logger.warning(f"⚠️ Отписка от пула {pool_name} не удалась.\n")
                         else:
-                            print(f"⚠️ Не удалось получить ответ на отписку от пула {pool_name}")
+                            logger.warning(f"⚠️ Не удалось получить ответ на отписку от пула {pool_name}\n")
                 except Exception as e:
-                    print(f"❌ Ошибка при отписке от пула {pool_name}: {e}")
+                    logger.error(f"❌ Ошибка при отписке от пула {pool_name}: {e}")
 
 
 def decode_swap_event(log: dict, pool: dict, base_token: str) -> Decimal:
@@ -99,5 +100,5 @@ def decode_swap_event(log: dict, pool: dict, base_token: str) -> Decimal:
     else:
         final_price = adjusted_price
 
-    print(f"📊 1 ETH ≈ {final_price:.6f} {base_token}")
+    logger.info(f"📊 1 ETH ≈ {final_price:.6f} {base_token}")
     return final_price

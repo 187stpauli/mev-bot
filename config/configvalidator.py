@@ -1,12 +1,9 @@
-from dotenv import load_dotenv
-import requests
+from urllib.parse import urlparse
+import aiohttp
 import logging
 import json
-import os
-import re
 
 logger = logging.getLogger(__name__)
-load_dotenv(dotenv_path=".env")
 
 
 class ConfigValidator:
@@ -26,74 +23,32 @@ class ConfigValidator:
             logging.error(f"❗️ Ошибка разбора JSON в файле конфигурации {self.config_path}.")
             exit(1)
 
-    @staticmethod
-    async def resolve_proxy(proxy: str) -> str:
-
-        if proxy.startswith("ENV:"):
-            proxy_name = proxy[4:]
-            raw = os.getenv("PROXIES")
-            if not raw:
-                logging.error("❗️ Ошибка: переменная окружения 'PROXIES' не найдена.")
-                exit(1)
-            try:
-                proxy_map = json.loads(raw)
-            except json.JSONDecodeError:
-                logging.error("❗️ Ошибка: 'PROXIES' в .env имеет некорректный JSON формат.")
-                exit(1)
-
-            if proxy_name not in proxy_map:
-                logging.error(f"❗️ Ошибка: ключ '{proxy_name}' не найден в PROXIES.")
-                exit(1)
-
-            return proxy_map[proxy_name]
-
-        return proxy
-
     async def validate_config(self) -> dict:
         """Валидация всех полей конфигурации"""
+        try:
 
-        await self.validate_required_keys()
+            await self.validate_required_keys()
 
-        if "network" not in self.config_data:
-            logging.error("❗️ Ошибка: Отсутствует 'network' в конфигурации.")
-            exit(1)
+            if "threshold" not in self.config_data:
+                logging.error("❗️ Ошибка: Отсутствует 'threshold' в конфигурации.")
+                exit(1)
 
-        if "proxy" not in self.config_data:
-            logging.error("❗️ Ошибка: Отсутствует 'proxy' в конфигурации.")
-            exit(1)
+            if "wss_url" not in self.config_data:
+                logging.error("❗️ Ошибка: Отсутствует 'wss_url' в конфигурации.")
+                exit(1)
 
-        if "token1" not in self.config_data:
-            logging.error("❗️ Ошибка: Отсутствует 'token1' в конфигурации.")
-            exit(1)
+            await self.validate_threshold(self.config_data["threshold"])
+            await self.validate_wss_url(self.config_data["wss_url"])
 
-        if "token2" not in self.config_data:
-            logging.error("❗️ Ошибка: Отсутствует 'token2' в конфигурации.")
-            exit(1)
+            return self.config_data
 
-        if self.config_data["token1"] == self.config_data["token2"]:
-            logging.error(
-                "❗️ Ошибка: Поля 'token1' и 'token2' имеют одинаковое значение, введите разные токены.")
-            exit(1)
-
-        load_dotenv(dotenv_path="../.env")
-
-        resolved_proxy = await self.resolve_proxy(self.config_data["proxy"])
-        self.config_data["proxy"] = resolved_proxy
-
-        await self.validate_network(self.config_data["network"])
-        await self.validate_proxy(self.config_data["proxy"])
-        await self.validate_token1(self.config_data["token1"])
-        await self.validate_token2(self.config_data["token2"])
-
-        return self.config_data
+        except Exception as e:
+            logger.error(f"🛑 Критическая ошибка: {e}")
 
     async def validate_required_keys(self):
         required_keys = [
-            "network",
-            "private_key",
-            "proxy",
-            "token1",
-            "token2"
+            "threshold",
+            "wss_url"
         ]
 
         for key in required_keys:
@@ -102,54 +57,42 @@ class ConfigValidator:
                 exit(1)
 
     @staticmethod
-    async def validate_token1(token: str) -> None:
-        """Валидация названия токена"""
-        tokens = [
-            "USDC",
-            "ETH"
-        ]
-        if token not in tokens:
-            logging.error("❗️ Ошибка: Неподдерживаемый токен! Введите один из поддерживаемых токенов.")
+    async def validate_threshold(threshold: float) -> None:
+
+        if not threshold > 0:
+            logging.error("❗️ Ошибка: Порог срабатывания меньше допустимого! Введите значение больше 0.")
             exit(1)
 
     @staticmethod
-    async def validate_token2(token: str) -> None:
-        """Валидация названия токена"""
-        tokens = [
-            "USDC",
-            "ETH"
-        ]
-        if token not in tokens:
-            logging.error("❗️ Ошибка: Неподдерживаемый токен! Введите один из поддерживаемых токенов.")
-            exit(1)
+    def is_valid_wss_url(url: str) -> bool:
+        try:
+            parsed = urlparse(url)
+            return parsed.scheme in ("wss", "ws") and bool(parsed.netloc)
+        except Exception as e:
+            print(e)
+            return False
 
     @staticmethod
-    async def validate_network(network: str) -> None:
-        """Валидация названия сети"""
-        networks = [
-            "Ethereum"
-        ]
-        if network not in networks:
-            logging.error("❗️ Ошибка: Неподдерживаемая сеть отправления! Введите одну из поддерживаемых сетей.")
+    async def test_ws_connection(url: str, timeout: int = 5) -> bool:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.ws_connect(url, timeout=timeout) as ws:
+                    await ws.close()
+                    return True
+        except Exception as e:
+            print(e)
+            return False
+
+    async def validate_wss_url(self, wss_url: str) -> None:
+
+        if not self.is_valid_wss_url(wss_url):
+            logging.error("❌ URL имеет неверный формат.")
             exit(1)
 
-    @staticmethod
-    async def validate_proxy(proxy: str) -> None:
-        """Валидация прокси-адреса"""
-        if not proxy:
-            logging.info("⚠️ Прокси не указан — пропуск валидации.\n")
-            return
+        logging.info("⏳ Проверка подключения к WebSocket...")
+        if await self.test_ws_connection(wss_url):
+            logging.info("✅ WebSocket соединение установлено.\n")
 
-        pattern = r"^(?P<login>[^:@]+):(?P<password>[^:@]+)@(?P<host>[\w.-]+):(?P<port>\d+)$"
-        match = re.match(pattern, proxy)
-        if not match:
-            logging.error("❗️ Ошибка: Неверный формат прокси! Должен быть 'login:pass@host:port'.")
-            exit(1)
-
-        proxy_url = {
-            "http": f"http://{proxy}"
-        }
-        response = requests.get("https://httpbin.org/ip", proxies=proxy_url, timeout=5)
-        if response.status_code != 200:
-            logging.error("❗️ Ошибка: 'proxy' нерабочий или вернул неверный статус-код!")
+        else:
+            logging.error("❌ Не удалось подключиться к WebSocket.")
             exit(1)
