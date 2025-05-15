@@ -1,6 +1,6 @@
 import asyncio
 from config.configvalidator import ConfigValidator
-from modules.uniswap import subscribe_to_pool
+from modules.uniswap import subscribe_to_pool, get_initial_prices
 from utils.price_tracker import PriceTracker
 from utils.logger import logger
 
@@ -15,6 +15,11 @@ async def main():
         threshold = settings["threshold"]
         wss_url = settings["wss_url"]
         price_tracker = PriceTracker(threshold)
+        
+        # Получение начальных цен
+        logger.info("🔍 Получение начальных цен токенов...\n")
+        await get_initial_prices(price_tracker, wss_url)
+        
         await asyncio.gather(
             subscribe_to_pool("USDT", price_tracker, wss_url),
             subscribe_to_pool("DAI", price_tracker, wss_url)
