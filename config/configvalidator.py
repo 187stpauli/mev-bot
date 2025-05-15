@@ -2,8 +2,11 @@ from urllib.parse import urlparse
 import aiohttp
 import logging
 import json
+import os
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+load_dotenv()  # Загрузка переменных из .env файла
 
 
 class ConfigValidator:
@@ -15,7 +18,16 @@ class ConfigValidator:
         """Загружает конфигурационный файл"""
         try:
             with open(self.config_path, "r", encoding="utf-8") as file:
-                return json.load(file)
+                config = json.load(file)
+                
+                # Если wss_url отсутствует в файле настроек, пробуем взять из .env
+                if "wss_url" in config and not config["wss_url"]:
+                    wss_url_env = os.getenv("WSS_URL")
+                    if wss_url_env:
+                        config["wss_url"] = wss_url_env
+                        logger.info("ℹ️ WSS URL загружен из .env файла")
+                
+                return config
         except FileNotFoundError:
             logging.error(f"❗️ Файл конфигурации {self.config_path} не найден.")
             exit(1)
